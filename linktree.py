@@ -2,6 +2,7 @@ import csv
 import time
 import re
 import requests
+import random
 from pathlib import Path
 from typing import List, Optional
 
@@ -15,7 +16,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 def get_final_linktree_url(driver):
-    print("🔗 Mengambil URL Linktree yang sudah jadi...")
+    print("?? Mengambil URL Linktree yang sudah jadi...")
     try:
         # Kita pakai selector yang lu kasih dari screenshot (elemen div di dalam button)
         final_url = driver.execute_script("""
@@ -29,15 +30,15 @@ def get_final_linktree_url(driver):
         """)
         
         if final_url:
-            print(f"🔥 URL Linktree Lu: {final_url}")
+            print(f"?? URL Linktree Lu: {final_url}")
             return final_url
         else:
-            print("⚠️ Elemen URL nggak ketemu, coba selector backup...")
+            print("?? Elemen URL nggak ketemu, coba selector backup...")
             # Backup: cari tag <a> atau div lain yang mengandung linktr.ee
             return driver.execute_script("return document.querySelector('div.truncate.text-primary')?.innerText.trim();")
             
     except Exception as e:
-        print(f"❌ Gagal ambil URL: {e}")
+        print(f"? Gagal ambil URL: {e}")
         return None
 # =============================
 # ADDITIONAL HELPER: AUTO-TOKEN
@@ -47,7 +48,7 @@ def get_bearer_token_automatically(driver):
     Menyadap request headers yang lewat ke domain graph.linktr.ee
     untuk mendapatkan Authorization Bearer yang valid.
     """
-    print("⏳ Mencari Bearer Token dari traffic...")
+    print("? Mencari Bearer Token dari traffic...")
     # Loop request yang sudah terjadi
     for request in reversed(driver.requests):
         if 'graph.linktr.ee' in request.url:
@@ -55,14 +56,12 @@ def get_bearer_token_automatically(driver):
             if auth and 'Bearer' in auth:
                 # Pastikan token tidak terpotong (kadang ada char aneh di logs)
                 clean_token = auth.strip()
-                print(f"✅ Token Ditemukan: {clean_token[:30]}...")
+                print(f"? Token Ditemukan: {clean_token[:30]}...")
                 return clean_token
     return None
-import requests
-import random
 
 def add_link_pure_api(driver, title, link_url, image_path=None):
-    print(f"🚀 Menambahkan Link via API: {title}")
+    print(f"?? Menambahkan Link via API: {title}")
     
     try:
         bearer_token = get_bearer_token_automatically(driver)
@@ -73,10 +72,10 @@ def add_link_pure_api(driver, title, link_url, image_path=None):
                 bearer_token = f"Bearer {token_raw}"
 
         if not bearer_token:
-            print("❌ Gagal ambil token!")
+            print("? Gagal ambil token!")
             return
 
-        # 🔥 AMBIL PROXY
+        # ?? AMBIL PROXY
         proxy = get_proxy()
         if not proxy:
             return
@@ -135,15 +134,15 @@ def add_link_pure_api(driver, title, link_url, image_path=None):
         if response.status_code == 200:
             res_json = response.json()
             if "errors" in res_json:
-                print(f"❌ API Error: {res_json['errors'][0]['message']}")
+                print(f"? API Error: {res_json['errors'][0]['message']}")
             else:
                 data = res_json.get('data', {}).get('addLink', {})
-                print(f"✅ Berhasil Insert API: {data.get('title')} (ID: {data.get('id')})")
+                print(f"? Berhasil Insert API: {data.get('title')} (ID: {data.get('id')})")
         else:
-            print(f"❌ Server Reject: {response.status_code} - {response.text}")
+            print(f"? Server Reject: {response.status_code} - {response.text}")
 
     except Exception as e:
-        print(f"❌ Error API: {str(e)}")
+        print(f"? Error API: {str(e)}")
 # =============================
 # CONFIG
 # =============================
@@ -251,7 +250,7 @@ def js_set_otp(driver, selector, value, timeout=15):
         return True
 
     except Exception as e:
-        print(f"❌ FAILED SET VALUE: {selector} | {e}")
+        print(f"? FAILED SET VALUE: {selector} | {e}")
         return False
 
 def get_otp_from_email(email, timeout=60, interval=3):
@@ -262,7 +261,7 @@ def get_otp_from_email(email, timeout=60, interval=3):
 
     while time.time() - start < timeout:
         try:
-            # ⚠️ PANGGIL SCRIPT inbox.py ATAU FUNGSI INTERNAL
+            # ?? PANGGIL SCRIPT inbox.py ATAU FUNGSI INTERNAL
             # Contoh: subprocess (paling simple & stabil)
             import subprocess
 
@@ -292,6 +291,10 @@ def get_otp_from_email(email, timeout=60, interval=3):
 # =============================
 # USERNAME CANDIDATES
 # =============================
+import re
+from typing import List, Optional
+import time
+
 VOWELS = set("aiueoAIUEO")
 
 def normalize_username(u: str) -> str:
@@ -302,6 +305,7 @@ def normalize_username(u: str) -> str:
 def with_trailing_underscore(s: str) -> str:
     return s if s.endswith("_") else s + "_"
 
+# ================= VOWEL =================
 def double_vowel_variants(s: str) -> List[str]:
     return [
         s[:i] + ch + ch + s[i+1:]
@@ -309,6 +313,56 @@ def double_vowel_variants(s: str) -> List[str]:
         if ch in VOWELS
     ]
 
+# ================= NUMBER =================
+def number_underscore_variants(s: str) -> List[str]:
+    results = set()
+
+    digit_indices = [i for i, c in enumerate(s) if c.isdigit()]
+
+    # underscore sebelum angka pertama
+    if digit_indices:
+        first = digit_indices[0]
+        results.add(s[:first] + "_" + s[first:])
+
+    # underscore antar angka
+    for i in range(len(s) - 1):
+        if s[i].isdigit() and s[i+1].isdigit():
+            results.add(s[:i+1] + "_" + s[i+1:])
+
+    # underscore tiap digit
+    temp = []
+    for c in s:
+        if c.isdigit():
+            temp.append(c + "_")
+        else:
+            temp.append(c)
+    results.add("".join(temp).rstrip("_"))
+
+    # underscore akhir
+    results.add(s + "_")
+
+    return list(results)
+
+# ================= SHORT USERNAME =================
+def short_username_variants(s: str) -> List[str]:
+    results = set()
+
+    if len(s) <= 2:
+        results.add(f"{s}_{s}")   # m7_m7
+
+        if any(c.isdigit() for c in s):
+            temp = []
+            for c in s:
+                if c.isdigit():
+                    temp.append("_" + c)
+                else:
+                    temp.append(c)
+            variant = "".join(temp)
+            results.add(f"{variant}_{s}")  # m_7_m7
+
+    return list(results)
+
+# ================= MAIN BUILDER =================
 def build_username_candidates(original: str) -> List[str]:
     base = normalize_username(original)
     seen, out = set(), []
@@ -318,32 +372,50 @@ def build_username_candidates(original: str) -> List[str]:
             seen.add(x)
             out.append(x)
 
+    # base
     add(base)
     add(with_trailing_underscore(base))
-    for v in double_vowel_variants(base):
+
+    # short username rule
+    if len(base) <= 2:
+        for v in short_username_variants(base):
+            add(v)
+
+    # number variants
+    num_vars = number_underscore_variants(base)
+    for v in num_vars:
+        add(v)
+
+    # vowel variants + combine
+    vowel_vars = double_vowel_variants(base)
+    for v in vowel_vars:
         add(v)
         add(with_trailing_underscore(v))
+
+        for nv in number_underscore_variants(v):
+            add(nv)
+
     return out
 
+# ================= PICK VALID =================
 def pick_valid_username(original: str, email: str) -> Optional[str]:
     for u in build_username_candidates(original):
-        print(f"🔍 Check username: {u}")
+        print(f"?? Check username: {u}")
         try:
             if validate_username(u, email):
-                print(f"✅ Username OK: {u}")
+                print(f"? Username OK: {u}")
                 return u
         except:
             pass
         time.sleep(1)
     return None
 
-
 # =============================
 # BIO BUILDER
 # =============================
 def build_bio_safe(display: str, max_len=160) -> str:
     parts = [
-        f"{display} มาร่วมสนุกเล่นสล็อตฟรีด้วยกัน!",
+        f"{display} ?????????????????????????????!",
     ]
     bio = []
     for p in parts:
@@ -381,9 +453,9 @@ def is_avatar_set(driver, reload_if_missing=True, max_reload=10) -> bool:
         if result is False:
             return False
 
-        # result == null → element belum ada
+        # result == null ? element belum ada
         if result is None and reload_if_missing and attempt < max_reload:
-            print("🔄 Avatar element not found — reloading page…")
+            print("?? Avatar element not found \Uffffffff reloading page\Uffffffff")
             driver.refresh()
             time.sleep(3)
             continue
@@ -426,11 +498,11 @@ def upload_avatar_and_wait(driver, image_path, timeout=10):
           .some(b => b.innerText.trim() === 'Save');
         """)
         if not still:
-            print("✅ Avatar upload SUCCESS")
+            print("? Avatar upload SUCCESS")
             return True
         time.sleep(0.3)
 
-    raise Exception("❌ Avatar upload TIMEOUT")
+    raise Exception("? Avatar upload TIMEOUT")
 
 # =============================
 # WAIT ONBOARDING START (FIX UTAMA)
@@ -458,14 +530,14 @@ def js_click_safe(driver, selector, retry=2, reload=True):
             if ok:
                 return True
         except Exception as e:
-            print(f"⚠️ JS error: {e}")
+            print(f"?? JS error: {e}")
 
         if reload and i < retry:
-            print("🔄 Element not found — reload page")
+            print("?? Element not found \Uffffffff reload page")
             driver.refresh()
             time.sleep(3)
 
-    raise Exception(f"❌ FAILED CLICK after retry: {selector}")
+    raise Exception(f"? FAILED CLICK after retry: {selector}")
 def wait_and_click_template(driver, timeout=20):
     end = time.time() + timeout
 
@@ -487,7 +559,7 @@ def wait_and_click_template(driver, timeout=20):
 
         time.sleep(1)
 
-    print("🔄 Template not found → reload")
+    print("?? Template not found ? reload")
     driver.refresh()
     time.sleep(5)
 
@@ -509,10 +581,10 @@ def wait_after_username(driver, timeout=15):
     while time.time() < end:
         url = driver.current_url
         if url != last_url:
-            print("🧠 URL:", url)
+            print("?? URL:", url)
             last_url = url
 
-        # sukses → OTP
+        # sukses ? OTP
         if driver.execute_script("""
             return !!document.querySelector("input[data-input-otp='true']");
         """):
@@ -536,7 +608,7 @@ def is_otp_failed(driver) -> bool:
     """)
 
 def resend_otp(driver):
-    print("🔁 Resend OTP")
+    print("?? Resend OTP")
 
     driver.execute_script("""
     [...document.querySelectorAll('button')]
@@ -547,8 +619,8 @@ def resend_otp(driver):
 def wait_otp_result(driver, timeout=30) -> str:
     """
     return:
-    - 'success' → URL berubah
-    - 'failed'  → muncul error text-red-600
+    - 'success' ? URL berubah
+    - 'failed'  ? muncul error text-red-600
     """
     start_url = driver.current_url
     end = time.time() + timeout
@@ -596,7 +668,7 @@ def wait_otp_input(driver, timeout=15):
 def fill_linktree_otp_precise(driver, otp, timeout=15):
     otp = otp.strip()
     if len(otp) != 6:
-        print("❌ OTP harus 6 digit")
+        print("? OTP harus 6 digit")
         return False
 
     wait = WebDriverWait(driver, timeout)
@@ -619,7 +691,7 @@ def fill_linktree_otp_precise(driver, otp, timeout=15):
             time.sleep(0.1)
 
         except Exception as e:
-            print(f"❌ Gagal isi OTP digit ke-{i}: {e}")
+            print(f"? Gagal isi OTP digit ke-{i}: {e}")
             return False
 
     return True
@@ -629,7 +701,7 @@ def get_proxy():
         proxies = [p.strip() for p in f if p.strip()]
 
     if not proxies:
-        print("❌ Proxy habis")
+        print("? Proxy habis")
         return None
 
     proxy = random.choice(proxies)
@@ -642,119 +714,92 @@ def get_proxy():
             f.write(p + "\n")
 
     return proxy
-def run(email,data, username, link_url):
-    print("🔍 Validating email & username")
-    print(f"process Account {email}")
-
+def run(email, data, username, link_url):
+    print("?? Validating username dulu...")
     display = username
 
-    email_check = validate_email(email)
-    if not email_check["ok"] or not email_check["can_signup"]:
-        print(f"❌ Email invalid: {email}")
-        return
-
-    picked = pick_valid_username(username, email)
-    if not picked:
-        print("❌ No valid username")
-        return
-
-    username = picked
-    print(f"🚀 Using username: {username}")
-    
-
-
-    proxy = get_proxy()
-    if not proxy:
-        return
-
-    seleniumwire_options = {
-        'proxy': {
-            'http': f'http://{proxy}',
-            'https': f'https://{proxy}',
-        }
-    }
-
-    driver = webdriver.Firefox(seleniumwire_options=seleniumwire_options)
-    wait = WebDriverWait(driver, WAIT_TIME)
-    driver.get("https://www.myip.com")  # test IP
+    driver = None
+    avatar_url = None
+    success = False
 
     try:
+        # ================= USERNAME VALIDATION =================
+        temp_email = "test@gmail.com"
+        picked = pick_valid_username(username, temp_email)
+
+        if not picked:
+            print("? No valid username")
+            return
+
+        username = picked
+        email = f"{username}@bulusari.id"
+
+        print(f"? Username OK: {username}")
+        print(f"?? Email jadi: {email}")
+
+        # email_check = validate_email(email)
+        # if not email_check["ok"] or not email_check["can_signup"]:
+        #     print(f"? Email invalid: {email}")
+        #     return
+
+        # ================= PROXY =================
+        proxy = get_proxy()
+        if not proxy:
+            return
+
+        seleniumwire_options = {
+            'proxy': {
+                'http': f'http://{proxy}',
+                'https': f'https://{proxy}',
+            }
+        }
+
+        # ================= DRIVER =================
+        driver = webdriver.Firefox(seleniumwire_options=seleniumwire_options)
+        wait = WebDriverWait(driver, WAIT_TIME)
+
+        driver.get("https://www.myip.com")
+
+        # ================= SIGNUP =================
         driver.get(SIGNUP_URL)
-        # Tambahkan ini di bagian awal pengecekan URL atau saat baru buka halaman
-        # Masukkan ini ke dalam loop utama atau fungsi pembersih modal
-        # Masukkan ini tepat setelah driver.get(SIGNUP_URL)
-        print("🛡️ Menyetujui Cookie agar fitur upload aktif...")
+
+        print("??? Menyetujui Cookie...")
         try:
-            # Tunggu sebentar agar modal muncul
-            time.sleep(4) 
-            
-            print("🛡️ Menembus Shadow DOM untuk klik Accept All...")
+            time.sleep(4)
             driver.execute_script("""
                 try {
-                    // 1. Targetkan host element-nya (aside)
                     const shadowHost = document.querySelector('aside.dg-consent-banner');
-                    
                     if (shadowHost && shadowHost.shadowRoot) {
-                        // 2. Cari tombol di dalam shadow root
-                        const acceptBtn = shadowHost.shadowRoot.querySelector('button.accept_all');
-                        
-                        if (acceptBtn) {
-                            acceptBtn.click();
-                            console.log('✅ Berhasil klik Accept All di dalam Shadow DOM');
-                        }
-                    } else {
-                        // 3. Cadangan kalau strukturnya sedikit beda
-                        const allButtons = document.querySelectorAll('aside');
-                        allButtons.forEach(aside => {
-                            if (aside.shadowRoot) {
-                                const btn = aside.shadowRoot.querySelector('button');
-                                if (btn && btn.innerText.includes('Accept')) btn.click();
-                            }
-                        });
+                        const btn = shadowHost.shadowRoot.querySelector('button.accept_all');
+                        if (btn) btn.click();
                     }
-                } catch (e) {
-                    console.error('Gagal nembus Shadow DOM:', e);
-                }
+                } catch(e){}
             """)
             time.sleep(2)
-            time.sleep(2) # Beri waktu modal untuk fade-out
-        except Exception as e:
-            print(f"⚠️ Gagal klik accept (mungkin sudah hilang): {e}")
+        except:
+            pass
 
-        # Tunggu animasi modal hilang
-        time.sleep(2)
-
-        # 3. Jika modal masih keras kepala menutupi layar, hapus paksa elemennya
-        driver.execute_script("""
-            const modal = document.querySelector('#onetrust-consent-sdk') || 
-                        document.querySelector('.onetrust-pc-dark-filter');
-            if (modal) modal.remove();
-            document.body.style.overflow = 'auto'; // Re-enable scrolling
-            document.documentElement.style.overflow = 'auto';
-        """)
-
-        # Input Email
+        # ================= INPUT EMAIL =================
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email']")))
         js_set_value(driver, "input[type='email']", email)
         js_click(driver, "button")
 
-        # Input Username Awal
+        # ================= USERNAME =================
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder='username']")))
         js_set_value(driver, "input[placeholder='username']", username)
         js_click(driver, "span.label:nth-child(1)")
         js_click(driver, "button")
 
-        time.sleep(3) # Beri jeda sejenak agar proses validasi username berjalan dan halaman merespon
+        time.sleep(3)
 
-        # ================= WAIT USERNAME OR OTP =================
-        print("⏳ Menentukan step…")
+        # ================= WAIT OTP =================
+        print("? Menentukan step\Uffffffff")
         while True:
             if is_otp_page(driver):
-                print("🔐 OTP page detected → lock username")
+                print("?? OTP page detected")
                 break
 
             if is_username_page(driver):
-                print("👤 Isi username ulang")
                 js_set_value(driver, "input[placeholder='username']", username)
                 driver.execute_script("""
                     [...document.querySelectorAll('button')]
@@ -766,214 +811,93 @@ def run(email,data, username, link_url):
 
             time.sleep(0.5)
 
-        # ================= LOOP OTP & URL MONITORING =================
+        # ================= OTP LOOP =================
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[data-input-otp='true']")))
-        
+
         last_otp = None
-        otp_page_url = driver.current_url # Kunci URL halaman OTP saat ini
+        otp_page_url = driver.current_url
 
         while True:
-            # 1. CEK URL (Prioritas: Jika kamu input manual dan berhasil, loop langsung putus)
             if driver.current_url != otp_page_url:
-                print(f"✅ URL BERUBAH KE: {driver.current_url}")
-                print("✅ LOGIN/VERIFIKASI SUKSES (DETEKSI REDIRECT).")
+                print("? OTP SUCCESS (redirect)")
                 break
 
-            # 2. AMBIL OTP DARI EMAIL
             otp = get_otp_from_email(email)
 
-            # 3. CEK JIKA OTP MASIH SAMA ATAU KOSONG
             if otp == last_otp or not otp:
-                # Tetap print tapi beri jeda, sambil monitor URL di iterasi berikutnya
-                print("♻️ OTP belum ada yang baru, monitor perubahan URL...")
                 time.sleep(2)
                 continue
 
-            # 4. INPUT OTP JIKA ADA YANG BARU
-            print(f"🔐 OTP BARU DITEMUKAN: {otp}")
+            print(f"?? OTP: {otp}")
             js_set_value(driver, "input[data-input-otp='true']", otp)
             last_otp = otp
-
-            # Jeda sebentar agar sistem sempat memproses redirect sebelum cek elemen
             time.sleep(2)
 
-            # 5. CEK HASIL (Double Check)
             result = wait_otp_result(driver)
 
             if result == "success":
-                print("✅ OTP VERIFIED BY ELEMENT")
                 break
-            
-            if result == "failed":
-                print("❌ OTP SALAH → resend")
-                resend_otp(driver)
-                time.sleep(2)
-                # Update url_awal seandainya resend mengubah struktur URL
-                otp_page_url = driver.current_url
-                continue
 
-            if result == "timeout":
-                print("⏱ OTP TIMEOUT → resend")
+            if result in ["failed", "timeout"]:
                 resend_otp(driver)
                 time.sleep(2)
                 otp_page_url = driver.current_url
 
-        print("⏳ Waiting onboarding route…")
+        print("? Waiting onboarding\Uffffffff")
         wait_onboarding_start(driver)
 
-        # ================= ONBOARDING STATE MACHINE =================
+        # ================= MAIN FLOW =================
         while True:
             url = driver.current_url
-            print("🧠 URL:", url)
-
+            print("?? URL:", url)
 
             if "/register/select-categories" in url:
-                print("📂 Memilih kategori: Personal")
-                
-                # 1. Klik kategori "Personal" berdasarkan teks di dalamnya
                 driver.execute_script("""
-                    const buttons = [...document.querySelectorAll('button')];
-                    const personalBtn = buttons.find(b => b.innerText.includes('Personal'));
-                    if (personalBtn) {
-                        personalBtn.scrollIntoView();
-                        personalBtn.click();
-                    }
+                    [...document.querySelectorAll('button')]
+                      .find(b => b.innerText.includes('Personal'))?.click();
                 """)
-                
-                time.sleep(1) # Beri jeda agar tombol Continue di bawah menjadi aktif (tidak disabled)
-                
-                # 2. Klik tombol Continue
-                print("➡️ Mengeklik Continue...")
+                time.sleep(1)
                 driver.execute_script("""
-                    const continueBtn = [...document.querySelectorAll('button')]
-                                        .find(b => b.innerText.trim() === 'Continue');
-                    if (continueBtn) {
-                        continueBtn.click();
-                    }
+                    [...document.querySelectorAll('button')]
+                      .find(b => b.innerText.trim() === 'Continue')?.click();
                 """)
-                time.sleep(3)
-            elif "/register/select-intents" in driver.current_url:
-                print("🎯 Memilih intent: I'm building my link in bio")
-                
-                driver.execute_script("""
-                    // Cari tombol yang mengandung teks spesifik
-                    const buttons = [...document.querySelectorAll('button')];
-                    const targetBtn = buttons.find(b => b.innerText.includes("I'm building my link in bio"));
-                    
-                    if (targetBtn) {
-                        targetBtn.scrollIntoView();
-                        targetBtn.click();
-                        console.log("✅ Intent selected");
-                    }
-                """)
-                
-                time.sleep(2)
-                
-                # Klik tombol Continue yang muncul setelah intent dipilih
-                driver.execute_script("""
-                    const continueBtn = [...document.querySelectorAll('button')]
-                                        .find(b => b.innerText.trim() === 'Continue');
-                    if (continueBtn && !continueBtn.disabled) {
-                        continueBtn.click();
-                    }
-                """)
-                time.sleep(3)
 
-            elif "/register/do-more" in url:
+            elif "/register/select-intents" in url:
                 driver.execute_script("""
-    const skipBtn = document.querySelector('button[data-testid="skip-button"]');
-    if (skipBtn) {
-        skipBtn.click();
-    } else {
-        // Backup: Cari berdasarkan teks jika data-testid tidak ditemukan
-        const backupBtn = [...document.querySelectorAll('button')]
-                          .find(b => b.innerText.trim() === 'Skip');
-        if (backupBtn) backupBtn.click();
-    }
-""")
-            
-            elif "/register/add-links" in url:
+                    [...document.querySelectorAll('button')]
+                      .find(b => b.innerText.includes("I'm building my link in bio"))?.click();
+                """)
+                time.sleep(2)
                 driver.execute_script("""
-    const skipBtn = document.querySelector('button[data-testid="skip-button"]');
-    if (skipBtn) {
-        skipBtn.click();
-    } else {
-        // Backup: Cari berdasarkan teks jika data-testid tidak ditemukan
-        const backupBtn = [...document.querySelectorAll('button')]
-                          .find(b => b.innerText.trim() === 'Skip');
-        if (backupBtn) backupBtn.click();
-    }
-""")
-            
+                    [...document.querySelectorAll('button')]
+                      .find(b => b.innerText.trim() === 'Continue')?.click();
+                """)
+
+            elif "/register/do-more" in url or "/register/add-links" in url:
+                driver.execute_script("""
+                    [...document.querySelectorAll('button')]
+                      .find(b => b.innerText.trim() === 'Skip')?.click();
+                """)
+
             elif "/register/select-plan" in url:
                 js_click(driver, "button.ml-6")
 
             elif "/register/select-template" in url:
-                print("🎨 Tahap: Select Template")
-                
-                # 1. Pilih template pertama dulu (agar tombol muncul)
                 driver.execute_script("""
-    const templates = document.querySelectorAll('button[class*="block overflow-hidden"]');
-    if (templates.length > 0) {
-        const randomIndex = Math.floor(Math.random() * templates.length);
-        const el = templates[randomIndex];
-
-        el.scrollIntoView({behavior: "smooth", block: "center"});
-        el.click();
-    }
-""")
-                
-                time.sleep(2)
-                
-                # 2. Klik tombol "Start with this template"
-                print("🚀 Mengeklik Start with this template...")
-                driver.execute_script("""
-                    const startBtn = [...document.querySelectorAll('button')]
-                                     .find(b => b.innerText.includes('Start with this template'));
-                    if (startBtn) {
-                        startBtn.click();
-                    } else {
-                        // Jika tidak ada, coba klik Skip sebagai cadangan
-                        const skipBtn = document.querySelector('button[data-testid="skip-button"]');
-                        if (skipBtn) skipBtn.click();
+                    const t = document.querySelectorAll('button[class*="block overflow-hidden"]');
+                    if (t.length > 0) {
+                        const r = Math.floor(Math.random()*t.length);
+                        t[r].click();
                     }
                 """)
-                time.sleep(5)
-
-                # # klik template dulu
-                # if not wait_and_click_template(driver):
-                #     raise Exception("❌ Gagal klik template")
-
-                # # ⏳ tunggu tombol Continue BENERAN ADA & KLIKABLE
-                # for _ in range(30):  # max ~3 detik (30 x 0.1)
-                #     try:
-                #         btn = driver.find_element(By.CSS_SELECTOR, "div.ease-out > button")
-                #         if btn.is_displayed() and btn.is_enabled():
-                #             btn.click()
-                #             break
-                #     except:
-                #         pass
-                #     time.sleep(0.1)
-                # else:
-                #     raise Exception("❌ Continue button tidak muncul")
-
-
-
-            elif "/register/select-platforms" in url or "/register/create/add-links" in url:
+                time.sleep(2)
                 driver.execute_script("""
-    const skipBtn = document.querySelector('button[data-testid="skip-button"]');
-    if (skipBtn) {
-        skipBtn.click();
-    } else {
-        // Backup: Cari berdasarkan teks jika data-testid tidak ditemukan
-        const backupBtn = [...document.querySelectorAll('button')]
-                          .find(b => b.innerText.trim() === 'Skip');
-        if (backupBtn) backupBtn.click();
-    }
-""")
+                    [...document.querySelectorAll('button')]
+                      .find(b => b.innerText.includes('Start with this template'))?.click();
+                """)
 
             elif "/register/name-image-bio" in url:
-                print("📸 Memproses Name, Bio, dan Avatar...")
+                print("?? Memproses Name, Bio, dan Avatar...")
                 
                 # Kita coba maksimal 3 kali jika avatar gagal
                 # --- Bagian Upload Avatar ---
@@ -992,10 +916,10 @@ def run(email,data, username, link_url):
                         
                         if avatar_data:
                             avatar_url = avatar_data
-                            print(f"✅ Avatar terdeteksi: {avatar_url}")
+                            print(f"? Avatar terdeteksi: {avatar_url}")
                             break
                             
-                        print(f"🔄 Percobaan Upload Avatar ke-{attempt + 1}...")
+                        print(f"?? Percobaan Upload Avatar ke-{attempt + 1}...")
 
                         # 2. Klik Avatar untuk buka modal
                         driver.execute_script("""
@@ -1024,7 +948,7 @@ def run(email,data, username, link_url):
 
                         # 6. Tunggu modal hilang & VERIFIKASI LINK ASLI (Bukan Blank)
                         wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, "input[type='file']")))
-                        print("⏳ Menunggu sinkronisasi gambar ke CDN...")
+                        print("? Menunggu sinkronisasi gambar ke CDN...")
                         
                         # Polling: Cek tiap detik sampai link berubah dari blank ke ugc
                         verified_url = None
@@ -1045,26 +969,25 @@ def run(email,data, username, link_url):
 
                         if verified_url:
                             avatar_url = verified_url
-                            print(f"✅ Avatar Berhasil Diupload & Terverifikasi: {avatar_url}")
+                            print(f"? Avatar Berhasil Diupload & Terverifikasi: {avatar_url}")
                             break # Sukses, keluar dari loop attempt
                         else:
-                            print("⚠️ Gambar belum tersinkron, mencoba upload ulang...")
+                            print("?? Gambar belum tersinkron, mencoba upload ulang...")
                             raise Exception("Upload gagal (Link masih blank)")
 
                     except Exception as e:
-                        print(f"⚠️ Error di percobaan {attempt + 1}: {e}")
-                        driver.refresh()
-                        time.sleep(5)
+                        print(f"?? Error di percobaan {attempt + 1}: {e}")
+
 
                 # Sekarang lu punya variable 'avatar_url' yang isinya link gambarnya
                 # --- Bagian Akhir: Isi Bio & Continue ---
-                print("✍️ Mengisi Display Name & Bio...")
+                print("?? Mengisi Display Name & Bio...")
                 js_set_value(driver, "#name", display)
                 time.sleep(1)
                 js_set_value(driver, "#bio", build_bio_safe(display))
                 time.sleep(2)
 
-                print("➡️ Klik Continue Final...")
+                print("?? Klik Continue Final...")
                 driver.execute_script("""
                     const finalBtn = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === 'Continue');
                     if (finalBtn && !finalBtn.disabled) {
@@ -1073,55 +996,111 @@ def run(email,data, username, link_url):
                     }
                 """)
                 time.sleep(5)
-
-            elif "/register/complete" in url:
-                
-                driver.get(ADMIN_URL)
+            elif "/admin" in url:
                 titles = [
-                    f"{display} เข้าสู่ระบบ",
-                    f"{display} มาร่วมสนุกกับเรา",
-                    f"{display} สมัครสมาชิก"
+                    f"{display} ???????????",
+                    f"{display} ????????????????",
+                    f"{display} ???????????"
                 ]
 
                 for title in titles:
-                    add_link_pure_api(
-                        driver,
-                        title=title,
-                        link_url=link_url,
-                        image_path=avatar_url
-                    )
-                print("🎉 ONBOARDING COMPLETE")
+                    add_link_pure_api(driver, title, link_url, avatar_url)
 
                 final_link = get_final_linktree_url(driver)
-        
+
                 if final_link:
-                    # Lu bisa simpan ke CSV atau print buat log
                     with open("hasil_linktree.txt", "a") as f:
                         f.write(f"{username}|{email}|{data}|{link_url}|{final_link}\n")
+
+                print("?? DONE")
+                success = True
+                break
+            elif "/register/select-platforms" in url:
+                driver.execute_script("""
+    const skipBtn = document.querySelector('button[data-testid="skip-button"]');
+    if (skipBtn) {
+        skipBtn.click();
+    } else {
+        // Backup: Cari berdasarkan teks jika data-testid tidak ditemukan
+        const backupBtn = [...document.querySelectorAll('button')]
+                          .find(b => b.innerText.trim() === 'Skip');
+        if (backupBtn) backupBtn.click();
+    }
+""")
+
+            elif "/register/complete" in url:
+                driver.get(ADMIN_URL)
+
+                titles = [
+                    f"{display} ???????????",
+                    f"{display} ????????????????",
+                    f"{display} ???????????"
+                ]
+
+                for title in titles:
+                    add_link_pure_api(driver, title, link_url, avatar_url)
+
+                final_link = get_final_linktree_url(driver)
+
+                if final_link:
+                    with open("hasil_linktree.txt", "a") as f:
+                        f.write(f"{display}|{email}|{data}|{link_url}|{final_link}\n")
+
+                print("?? DONE")
+                success = True
                 break
 
             time.sleep(2)
 
-        # ================= ADMIN =================
-
-        print("✅ FLOW FINISHED")
-
+    except Exception as e:
+        print(f"? ERROR: {e}")
 
     finally:
-        print("⏸ Browser left open for debug")
-
+        if driver:
+            if success:
+                print("?? Closing browser...")
+                driver.quit()
+            else:
+                print("?? Browser tetap terbuka (debug)")
 
 # =============================
 # ENTRY
 # =============================
-if __name__ == "__main__":
-    with open(CSV_FILE, newline="", encoding="utf-8") as f:
+
+
+def pop_first_row(csv_file):
+    with open(csv_file, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
-    for row in rows:
-        run(
-            email=row["email"].strip(),
-            data=row["key"].strip(),
-            username=row["username"].strip(),
-            link_url=row["url"].strip(),
-        )
+    if not rows:
+        return None, []
+
+    first = rows[0]
+    remaining = rows[1:]
+
+    # tulis ulang file tanpa baris pertama
+    with open(csv_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=first.keys())
+        writer.writeheader()
+        writer.writerows(remaining)
+
+    return first
+
+
+if __name__ == "__main__":
+    while True:
+        row = pop_first_row(CSV_FILE)
+
+        if not row:
+            print("? Semua data sudah diproses")
+            break
+
+        try:
+            run(
+                email="test@gmail.com",
+                data=row["key"].strip(),
+                username=row["username"].strip(),
+                link_url=row["url"].strip(),
+            )
+        except Exception as e:
+            print(f"? Error: {e}")
